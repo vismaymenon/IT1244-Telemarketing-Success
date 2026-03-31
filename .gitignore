@@ -209,3 +209,8 @@ __marimo__/
 #data
 data/*.csv
 
+# images
+.png
+.jpg
+.jpeg
+
