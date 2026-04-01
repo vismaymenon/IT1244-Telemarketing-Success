@@ -1,4 +1,7 @@
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, recall_score, classification_report, roc_auc_score
 
 #data prep
 cleandf = pd.read_csv("master_features.csv")
@@ -6,17 +9,16 @@ xvals = cleandf[['macro_economic_pca_1', 'month_may', 'month_apr', 'month_oct', 
 yvals = cleandf["target_y"]
 
 #train test split
-from sklearn.model_selection import train_test_split
 xtrain, xtest, ytrain, ytest = train_test_split(xvals, yvals, test_size=0.2, random_state=1244, stratify=yvals)
 
 #regression
-from sklearn.linear_model import LogisticRegression
-classifer = LogisticRegression()
+negative_prop, positive_prop = ytrain.value_counts(normalize=True)
+class_weights = {0: 1 /negative_prop, 1: 1 /positive_prop}  # Adjust class weights to handle imbalance
+classifer = LogisticRegression(class_weight=class_weights, max_iter=1000, random_state=1244)
 classifer.fit(xtrain, ytrain)
 ypred = classifer.predict(xtest)
 
 #evaluation
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, recall_score, classification_report, roc_auc_score
 cm = confusion_matrix(ytest, ypred)
 print(cm)
 acc = accuracy_score(ytest, ypred)
