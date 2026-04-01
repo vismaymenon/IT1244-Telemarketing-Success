@@ -13,9 +13,10 @@ from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKF
 from sklearn.metrics import classification_report, roc_auc_score, ConfusionMatrixDisplay
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Read data and prepare training and testing sets
-data = pd.read_csv("./data/master_features.csv")
+data = pd.read_csv("../../data/master_features.csv")
 X = data.drop(columns=["target_y"])
 y = data["target_y"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1244)
@@ -39,13 +40,17 @@ param_grid = {
 }
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1244)
-grid_search = GridSearchCV(
-    DecisionTreeClassifier(class_weight='balanced', random_state=1244),
-    param_grid,
-    scoring='roc_auc',
-    cv=cv,
-    n_jobs=-1
-)
+def dt(class_weight, random_state, cv):
+    grid_search = GridSearchCV(
+        DecisionTreeClassifier(class_weight=class_weight, random_state=random_state),
+        param_grid,
+        scoring='roc_auc',
+        cv=cv,
+        n_jobs=-1
+    )
+    return grid_search
+
+grid_search = dt(class_weight='balanced', random_state=1244, cv=cv)
 grid_search.fit(X_train_final, y_train)
 
 print(f"Best parameters: {grid_search.best_params_}")
@@ -55,7 +60,7 @@ print(f"Best CV AUC: {grid_search.best_score_:.4f}")
 best_dt = grid_search.best_estimator_
 
 # Evaluate on test set
-y_prob = best_dt.predict_proba(X_test_final)[:, 1]
+y_prob = np.asarray(best_dt.predict_proba(X_test_final))[:, 1]
 y_pred = best_dt.predict(X_test_final)
 
 print(classification_report(y_test, y_pred, target_names=['Unsuccessful', 'Successful']))
@@ -65,7 +70,7 @@ print(f"Test AUC-ROC: {roc_auc_score(y_test, y_prob):.4f}")
 ConfusionMatrixDisplay.from_predictions(y_test, y_pred, display_labels=['Unsuccessful', 'Successful'])
 plt.title("Decision Tree — Confusion Matrix")
 plt.tight_layout()
-plt.savefig("./models/dt_cm.png")
+plt.savefig("../models/dt_cm.png")
 plt.show()
 
 # Visualise the tree (limited depth for readability)
@@ -81,7 +86,7 @@ plot_tree(
 )
 plt.title("Decision Tree Structure (top 3 levels)")
 plt.tight_layout()
-plt.savefig("./models/dt_tree.png")
+plt.savefig("../models/dt_tree.png")
 plt.show()
 
 # Feature importances
@@ -89,5 +94,5 @@ importances = pd.Series(best_dt.feature_importances_, index=top_features).sort_v
 importances.plot(kind='barh', title='Decision Tree — Feature Importances')
 plt.xlabel('Importance')
 plt.tight_layout()
-plt.savefig("./models/dt_feature_importance.png")
+plt.savefig("../models/dt_feature_importance.png")
 plt.show()

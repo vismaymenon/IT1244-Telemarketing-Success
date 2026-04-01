@@ -30,26 +30,30 @@ print(f"scale_pos_weight (train only): {scale:.4f}")
 
 
 # ── 3. Define the model with imbalance correction ──────────────────────────
-xgb_clf = XGBClassifier(
-    n_estimators=100,
-    max_depth=3,
-    learning_rate=0.1,
-    subsample=1.0,
-    colsample_bytree=1.0,
-    objective='binary:logistic',    # binary → your target is binary (0 = Unsuccessful, 1 = Successful) 
-                                    # logistic → use logistic regression as the underlying prediction model
-                                    # The model outputs a probability between 0 and 1 (e.g., 0.73 = 73% chance of success)
-                                    # Internally it minimises cross-entropy loss
-    eval_metric='logloss',          # logloss (log loss) penalises confident wrong predictions more heavily than uncertain ones
-                                    # A lower logloss = better model
-    n_jobs=-1,
-    random_state=42
-)
+def xgb(scale_pos_weight, random_state):
+    xgb_clf = XGBClassifier(
+        n_estimators=100,
+        max_depth=3,
+        learning_rate=0.1,
+        subsample=1.0,
+        colsample_bytree=1.0,
+        objective='binary:logistic',    # binary → your target is binary (0 = Unsuccessful, 1 = Successful) 
+                                        # logistic → use logistic regression as the underlying prediction model
+                                        # The model outputs a probability between 0 and 1 (e.g., 0.73 = 73% chance of success)
+                                        # Internally it minimises cross-entropy loss
+        eval_metric='logloss',          # logloss (log loss) penalises confident wrong predictions more heavily than uncertain ones
+                                        # A lower logloss = better model
+        n_jobs=-1,
+        random_state= random_state,
+        scale_pos_weight=scale_pos_weight  # ← Set the imbalance correction
+        )
+    return xgb_clf
 
+xgb_clf = xgb(scale_pos_weight=scale, random_state=1244)
 
 # ── 4. Cross-validate BEFORE final fit (model validation step) ─────────────
 #    This tells you how well your design generalises — use X_train/y_train only
-cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=42)
+cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1244)
 
 cv_scores = cross_val_score(
     xgb_clf, X_train, y_train,      # ← CV runs on training data only, test set stays hidden

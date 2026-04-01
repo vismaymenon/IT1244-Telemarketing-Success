@@ -62,37 +62,49 @@ def add_cyclical_month_encoding(df, month_col):
     df[f'{month_col}_cos'] = np.cos(2 * np.pi * month_num / 12)* df[month_col]
     df.drop(columns=[month_col], inplace=True)
     return df
-months_to_encode = [col for col in top_features if col.startswith('month_')]
-for month_col in months_to_encode:
-    X_train_final = add_cyclical_month_encoding(X_train_final, month_col)
-    X_test_final = add_cyclical_month_encoding(X_test_final, month_col)
+
+def encode_months(top_features, X_train, X_test):
+    X_train_final = X_train.copy()
+    X_test_final = X_test.copy()
+    months_to_encode = [col for col in top_features if col.startswith('month_')]
+    for month_col in months_to_encode:
+        X_train_final = add_cyclical_month_encoding(X_train_final, month_col)
+        X_test_final = add_cyclical_month_encoding(X_test_final, month_col)
+    return X_train_final, X_test_final
+
+X_train_final, X_test_final = encode_months(top_features, X_train, X_test)
 
 print(X_train_final.shape)
 print(X_train_final.columns.tolist())
 
 # Define the model architecture
-model = keras.Sequential([
-    keras.layers.Input(shape=(X_train_final.shape[1],)),
-    keras.layers.Dense(7, activation='relu'), # 2/3 of the number of features
-    keras.layers.Dropout(0.2),
-    keras.layers.Dense(7, activation='relu'),
-    keras.layers.Dropout(0.2),
-    keras.layers.Dense(1, activation='sigmoid') # Binary classification output
-])
+def nn_build_and_compile(optimizer, loss):
+    model = keras.Sequential([
+        keras.layers.Input(shape=(X_train_final.shape[1],)),
+        keras.layers.Dense(7, activation='relu'), # 2/3 of the number of features
+        keras.layers.Dropout(0.2),
+        keras.layers.Dense(7, activation='relu'),
+        keras.layers.Dropout(0.2),
+        keras.layers.Dense(1, activation='sigmoid') # Binary classification output
+    ])
+    model.compile(optimizer=optimizer, loss=loss, metrics=[keras.metrics.AUC(name='auc')])
+    return model
 
 #Compile with adam + binary_crossentropy + AUC metric
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=[keras.metrics.AUC(name='auc')])
+model = nn_build_and_compile(optimizer='adam', loss='binary_crossentropy')
 
 # Fit with early stopping + validation split + class weights
-early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-history = model.fit(X_train_final, y_train, 
-                    validation_split=0.2, 
-                    epochs=100, 
-                    batch_size=32, 
-                    class_weight=class_weights,
-                    callbacks=[early_stopping])
+def nn_fit(model, X_train, y_train, class_weights, epochs, batch_size):
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    history = model.fit(X_train, y_train, 
+                        validation_split=0.2, 
+                        epochs=epochs, 
+                        batch_size=batch_size, 
+                        class_weight=class_weights,
+                        callbacks=[early_stopping])
+    return history
 
-
+history = nn_fit(model, X_train_final, y_train, class_weights, epochs=100, batch_size=32)
 # Evaluate on test set
 y_prob = model.predict(X_test_final)
 y_pred = (y_prob > 0.5).astype(int)

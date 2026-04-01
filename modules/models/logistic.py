@@ -10,11 +10,14 @@ yvals = cleandf["target_y"]
 
 #train test split
 xtrain, xtest, ytrain, ytest = train_test_split(xvals, yvals, test_size=0.2, random_state=1244, stratify=yvals)
+negative_prop, positive_prop = yvals.value_counts(normalize=True)
+class_weights = {0: 1 /negative_prop, 1: 1 /positive_prop}  # Adjust class weights to handle imbalance
 
 #regression
-negative_prop, positive_prop = ytrain.value_counts(normalize=True)
-class_weights = {0: 1 /negative_prop, 1: 1 /positive_prop}  # Adjust class weights to handle imbalance
-classifer = LogisticRegression(class_weight=class_weights, max_iter=1000, random_state=1244)
+def lr(class_weights, random_state):
+    model = LogisticRegression(class_weight=class_weights, random_state=random_state)
+    return model
+classifer = lr(class_weights, 1244)
 classifer.fit(xtrain, ytrain)
 ypred = classifer.predict(xtest)
 

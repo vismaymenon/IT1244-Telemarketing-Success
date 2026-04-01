@@ -12,19 +12,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import (
-    train_test_split, GridSearchCV, RandomizedSearchCV, StratifiedKFold
+    train_test_split , StratifiedKFold
 )
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     precision_score, recall_score, f1_score, roc_curve, ConfusionMatrixDisplay
 )
-from xgboost import XGBClassifier
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.callbacks import EarlyStopping
+
+
+from models.decision_tree import dt  # Reuse the GridSearchCV setup from decision_tree.py
+from models.logistic import lr  # Reuse the Logistic Regression setup from logistic.py
+from models.random_forest import rf  # Reuse the Random Forest setup from random_forest.py
+from models.XGBoost import xgb  # Reuse the XGBoost setup from XGBoost.py
+from models.neural_network import nn_build_and_compile, nn_fit, encode_months  # Reuse the Neural Network setup from neural_network.py
 
 warnings.filterwarnings('ignore')
 tf.get_logger().setLevel('ERROR')
@@ -53,8 +54,10 @@ X_all = data.drop(columns=[TARGET])
 y     = data[TARGET]
 
 # ── Shared train / test split (stratified to preserve 88/12 class ratio) ─────
+
+random_state = 1244
 X_train_all, X_test_all, y_train, y_test = train_test_split(
-    X_all, y, test_size=0.2, random_state=1244, stratify=y
+    X_all, y, test_size=0.2, random_state=random_state, stratify=y
 )
 X_train = X_train_all[TOP_FEATURES]
 X_test  = X_test_all[TOP_FEATURES]
@@ -62,7 +65,16 @@ X_test  = X_test_all[TOP_FEATURES]
 print(f"Dataset: {len(data):,} rows  |  Train: {len(y_train):,}  |  Test: {len(y_test):,}")
 print(f"Positive rate — Train: {y_train.mean():.3f}  |  Test: {y_test.mean():.3f}\n")
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1244)
+# Global Variables for model training
+
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+
+neg_prop, pos_prop = y_train.value_counts(normalize=True).sort_index()
+class_weights = {0: 1 / neg_prop, 1: 1 / pos_prop}
+
+neg_count = (y_train == 0).sum()
+pos_count = (y_train == 1).sum()
+scale_pos = neg_count / pos_count
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. LOGISTIC REGRESSION
@@ -71,8 +83,10 @@ print("=" * 60)
 print("1/5  Logistic Regression")
 print("=" * 60)
 
-lr = LogisticRegression(max_iter=1000, random_state=1244)
+lr = lr(class_weights, random_state)
+
 lr.fit(X_train, y_train)
+
 lr_pred = lr.predict(X_test)
 lr_prob = lr.predict_proba(X_test)[:, 1]
 
@@ -83,19 +97,14 @@ print("\n" + "=" * 60)
 print("2/5  Decision Tree  (GridSearchCV)")
 print("=" * 60)
 
-dt_grid = GridSearchCV(
-    DecisionTreeClassifier(class_weight='balanced', random_state=1244),
-    {
-        'max_depth':        [3, 4, 5, 6, 7],
-        'min_samples_leaf': [1, 5, 10, 20],
-        'criterion':        ['gini', 'entropy']
-    },
-    scoring='roc_auc', cv=cv, n_jobs=-1
-)
+dt_grid = dt(class_weight= class_weights, random_state=random_state, cv=cv)  # Reuse the GridSearchCV setup from decision_tree.py
+
 dt_grid.fit(X_train, y_train)
+
 best_dt = dt_grid.best_estimator_
 dt_pred = best_dt.predict(X_test)
 dt_prob = best_dt.predict_proba(X_test)[:, 1]
+
 print(f"Best params : {dt_grid.best_params_}")
 print(f"Best CV AUC : {dt_grid.best_score_:.4f}")
 
@@ -106,20 +115,15 @@ print("\n" + "=" * 60)
 print("3/5  Random Forest  (RandomizedSearchCV)")
 print("=" * 60)
 
-rf_search = RandomizedSearchCV(
-    RandomForestClassifier(class_weight='balanced', random_state=1244, n_jobs=-1),
-    {
-        'n_estimators':     [100, 200, 300, 500],
-        'max_depth':        [3, 4, 5, 6, 7, None],
-        'min_samples_leaf': [1, 5, 10, 20],
-        'max_features':     ['sqrt', 'log2']
-    },
-    n_iter=30, scoring='roc_auc', cv=cv, random_state=1244, n_jobs=-1
-)
+
+rf_search = rf(class_weights, random_state, cv)  # Reuse the RandomizedSearchCV setup from random_forest.py
+
 rf_search.fit(X_train, y_train)
+
 best_rf = rf_search.best_estimator_
 rf_pred = best_rf.predict(X_test)
 rf_prob = best_rf.predict_proba(X_test)[:, 1]
+
 print(f"Best params : {rf_search.best_params_}")
 print(f"Best CV AUC : {rf_search.best_score_:.4f}")
 
@@ -130,18 +134,13 @@ print("\n" + "=" * 60)
 print("4/5  XGBoost  (all features)")
 print("=" * 60)
 
-neg_count = (y_train == 0).sum()
-pos_count = (y_train == 1).sum()
-scale_pos = neg_count / pos_count
+
 print(f"scale_pos_weight (train only): {scale_pos:.4f}")
 
-xgb_clf = XGBClassifier(
-    n_estimators=100, max_depth=3, learning_rate=0.1,
-    subsample=1.0, colsample_bytree=1.0,
-    objective='binary:logistic', eval_metric='logloss',
-    scale_pos_weight=scale_pos, n_jobs=-1, random_state=42, verbosity=0
-)
+xgb_clf = xgb(scale_pos_weight=scale_pos, random_state=random_state)
+
 xgb_clf.fit(X_train_all, y_train)
+
 xgb_pred = xgb_clf.predict(X_test_all)
 xgb_prob = xgb_clf.predict_proba(X_test_all)[:, 1]
 
@@ -152,50 +151,16 @@ print("\n" + "=" * 60)
 print("5/5  Neural Network  (TensorFlow/Keras)")
 print("=" * 60)
 
-tf.random.set_seed(1244)
+X_train_nn, X_test_nn = encode_months(TOP_FEATURES, X_train, X_test)  # Reuse the month encoding function from neural_network.py
 
-MONTH_NUM = {
-    'month_jan': 1, 'month_feb': 2, 'month_mar': 3,  'month_apr': 4,
-    'month_may': 5, 'month_jun': 6, 'month_jul': 7,  'month_aug': 8,
-    'month_sep': 9, 'month_oct': 10,'month_nov': 11, 'month_dec': 12
-}
+nn_model = nn_build_and_compile(optimizer='adam', loss='binary_crossentropy')  # Reuse the model architecture function from neural_network.py
+# the nn_build_and_compile function uses metrics=[keras.metrics.AUC(name='auc') internally, so we don't need to specify it again here
 
-def cyclical_month_encoding(df, month_cols):
-    df = df.copy()
-    for col in month_cols:
-        n = MONTH_NUM[col]
-        df[f'{col}_sin'] = np.sin(2 * np.pi * n / 12) * df[col]
-        df[f'{col}_cos'] = np.cos(2 * np.pi * n / 12) * df[col]
-        df.drop(columns=[col], inplace=True)
-    return df
+nn_fit(nn_model, X_train_nn, y_train, class_weights, epochs=100, batch_size=32)  # Reuse the fitting function from neural_network.py
 
-month_cols   = [c for c in TOP_FEATURES if c.startswith('month_')]
-X_train_nn   = cyclical_month_encoding(X_train.copy(), month_cols)
-X_test_nn    = cyclical_month_encoding(X_test.copy(),  month_cols)
-
-neg_prop, pos_prop = y_train.value_counts(normalize=True).sort_index()
-class_weights = {0: 1 / neg_prop, 1: 1 / pos_prop}
-
-nn_model = keras.Sequential([
-    keras.layers.Input(shape=(X_train_nn.shape[1],)),
-    keras.layers.Dense(7, activation='relu'),
-    keras.layers.Dropout(0.2),
-    keras.layers.Dense(7, activation='relu'),
-    keras.layers.Dropout(0.2),
-    keras.layers.Dense(1, activation='sigmoid')
-])
-nn_model.compile(
-    optimizer='adam', loss='binary_crossentropy',
-    metrics=[keras.metrics.AUC(name='auc')]
-)
-es = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-nn_model.fit(
-    X_train_nn, y_train,
-    validation_split=0.2, epochs=100, batch_size=32,
-    class_weight=class_weights, callbacks=[es], verbose=0
-)
 nn_prob = nn_model.predict(X_test_nn, verbose=0).flatten()
 nn_pred = (nn_prob > 0.5).astype(int)
+
 print("Neural Network trained successfully.")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -203,10 +168,10 @@ print("Neural Network trained successfully.")
 # ══════════════════════════════════════════════════════════════════════════════
 def metrics(y_true, y_pred, y_prob):
     return {
-        'Precision': round(precision_score(y_true, y_pred), 4),
-        'Recall':    round(recall_score(y_true, y_pred),    4),
-        'F1-Score':  round(f1_score(y_true, y_pred),        4),
-        'AUC-ROC':   round(roc_auc_score(y_true, y_prob),   4),
+        'Precision': round(float(precision_score(y_true, y_pred)), 4),
+        'Recall':    round(float(recall_score(y_true, y_pred)),    4),
+        'F1-Score':  round(float(f1_score(y_true, y_pred)),        4),
+        'AUC-ROC':   round(float(roc_auc_score(y_true, y_prob)),   4),
         'y_pred':    y_pred,
         'y_prob':    y_prob,
     }
