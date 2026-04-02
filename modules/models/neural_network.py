@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Read data and prepare training and testing sets
-data = pd.read_csv("./data/master_features.csv")
+data = pd.read_csv("data/master_features.csv")
 X = data.drop(columns=["target_y"])
 y = data["target_y"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1244)
@@ -78,33 +78,27 @@ print(X_train_final.shape)
 print(X_train_final.columns.tolist())
 
 # Define the model architecture
-def nn_build_and_compile(optimizer, loss):
-    model = keras.Sequential([
-        keras.layers.Input(shape=(X_train_final.shape[1],)),
-        keras.layers.Dense(7, activation='relu'), # 2/3 of the number of features
-        keras.layers.Dropout(0.2),
-        keras.layers.Dense(7, activation='relu'),
-        keras.layers.Dropout(0.2),
-        keras.layers.Dense(1, activation='sigmoid') # Binary classification output
-    ])
-    model.compile(optimizer=optimizer, loss=loss, metrics=[keras.metrics.AUC(name='auc')])
-    return model
+model = keras.Sequential([
+    keras.layers.Input(shape=(X_train_final.shape[1],)),
+    keras.layers.Dense(7, activation='relu'), # 2/3 of the number of features
+    keras.layers.Dropout(0.2),
+    keras.layers.Dense(7, activation='relu'),
+    keras.layers.Dropout(0.2),
+    keras.layers.Dense(1, activation='sigmoid') # Binary classification output
+])
 
 #Compile with adam + binary_crossentropy + AUC metric
-model = nn_build_and_compile(optimizer='adam', loss='binary_crossentropy')
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=[keras.metrics.AUC(name='auc')])
 
 # Fit with early stopping + validation split + class weights
-def nn_fit(model, X_train, y_train, class_weights, epochs, batch_size):
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-    history = model.fit(X_train, y_train, 
-                        validation_split=0.2, 
-                        epochs=epochs, 
-                        batch_size=batch_size, 
-                        class_weight=class_weights,
-                        callbacks=[early_stopping])
-    return history
+early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+history = model.fit(X_train_final, y_train, 
+                    validation_split=0.2, 
+                    epochs=100, 
+                    batch_size=32, 
+                    class_weight=class_weights,
+                    callbacks=[early_stopping])
 
-history = nn_fit(model, X_train_final, y_train, class_weights, epochs=100, batch_size=32)
 # Evaluate on test set
 y_prob = model.predict(X_test_final)
 y_pred = (y_prob > 0.5).astype(int)
@@ -115,4 +109,7 @@ print(f"Test AUC-ROC: {roc_auc_score(y_test, y_prob):.4f}")
 
 # Plot confusion matrix
 ConfusionMatrixDisplay.from_predictions(y_test, y_pred, display_labels=['Unsuccessful', 'Successful'])
+plt.title("Neural Network — Confusion Matrix")
+plt.tight_layout()
+plt.savefig("modules/models/images/nn/nn_cm.png")
 plt.show()

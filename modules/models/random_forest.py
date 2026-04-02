@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Read data and prepare training and testing sets
-data = pd.read_csv("./data/master_features.csv")
+data = pd.read_csv("data/master_features.csv")
 X = data.drop(columns=["target_y"])
 y = data["target_y"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1244)
@@ -42,18 +42,15 @@ param_dist = {
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1244)
 
-def rf(class_weights, random_state, cv):
-    random_search = RandomizedSearchCV(
-        RandomForestClassifier(class_weight= class_weights, random_state=random_state, n_jobs=-1),
-        param_distributions=param_dist,
-        n_iter=30,
-        scoring='roc_auc',
-        cv=cv,
-        random_state=random_state,
-        n_jobs=-1
-    )
-    return random_search
-random_search = rf('balanced', 1244, cv)
+random_search = RandomizedSearchCV(
+    RandomForestClassifier(class_weight= 'balanced', random_state=1244, n_jobs=-1),
+    param_distributions=param_dist,
+    n_iter=30,
+    scoring='roc_auc',
+    cv=cv,
+    random_state=1244,
+    n_jobs=-1
+)
 random_search.fit(X_train_final, y_train)
 
 print(f"Best parameters: {random_search.best_params_}")
@@ -73,7 +70,7 @@ print(f"Test AUC-ROC: {roc_auc_score(y_test, y_prob):.4f}")
 ConfusionMatrixDisplay.from_predictions(y_test, y_pred, display_labels=['Unsuccessful', 'Successful'])
 plt.title("Random Forest — Confusion Matrix")
 plt.tight_layout()
-plt.savefig("modules/models/rf_cm.png")
+plt.savefig("modules/models/images/rf/rf_cm.png")
 plt.show()
 
 # Feature importances (mean decrease in impurity across all trees)
@@ -85,5 +82,5 @@ fig, ax = plt.subplots()
 importances.plot(kind='barh', xerr=std_sorted, ax=ax, title='Random Forest — Feature Importances')
 ax.set_xlabel('Mean Decrease in Impurity')
 plt.tight_layout()
-plt.savefig("modules/models/rf_feature_importance.png")
+plt.savefig("modules/models/images/rf/rf_feature_importance.png")
 plt.show()

@@ -1,11 +1,19 @@
 import re
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix, RocCurveDisplay
 
-# ── 0. Clean column names (do this ONCE on X and df) ───────────────────────
+
+# ── 0. Load data ──────────────────────────────────────────────────────────
+# Load your dataset (replace with your actual data source)
+df = pd.read_csv('data/master_features.csv')
+X = df.drop(columns=['target_y'])  # Replace 'target_column' with your target column name
+y = df['target_y']
+
+# ── 1. Clean column names (do this ONCE on X and df) ───────────────────────
 clean = lambda cols: [
     re.sub(r'[\[\]<>()]', '', c).strip().replace('  ', ' ').replace(' ', '_')
     for c in cols
@@ -30,26 +38,22 @@ print(f"scale_pos_weight (train only): {scale:.4f}")
 
 
 # ── 3. Define the model with imbalance correction ──────────────────────────
-def xgb(scale_pos_weight, random_state):
-    xgb_clf = XGBClassifier(
-        n_estimators=100,
-        max_depth=3,
-        learning_rate=0.1,
-        subsample=1.0,
-        colsample_bytree=1.0,
-        objective='binary:logistic',    # binary → your target is binary (0 = Unsuccessful, 1 = Successful) 
-                                        # logistic → use logistic regression as the underlying prediction model
-                                        # The model outputs a probability between 0 and 1 (e.g., 0.73 = 73% chance of success)
-                                        # Internally it minimises cross-entropy loss
-        eval_metric='logloss',          # logloss (log loss) penalises confident wrong predictions more heavily than uncertain ones
-                                        # A lower logloss = better model
-        n_jobs=-1,
-        random_state= random_state,
-        scale_pos_weight=scale_pos_weight  # ← Set the imbalance correction
-        )
-    return xgb_clf
-
-xgb_clf = xgb(scale_pos_weight=scale, random_state=1244)
+xgb_clf = XGBClassifier(
+    n_estimators=100,
+    max_depth=3,
+    learning_rate=0.1,
+    subsample=1.0,
+    colsample_bytree=1.0,
+    objective='binary:logistic',    # binary → your target is binary (0 = Unsuccessful, 1 = Successful) 
+                                    # logistic → use logistic regression as the underlying prediction model
+                                    # The model outputs a probability between 0 and 1 (e.g., 0.73 = 73% chance of success)
+                                    # Internally it minimises cross-entropy loss
+    eval_metric='logloss',          # logloss (log loss) penalises confident wrong predictions more heavily than uncertain ones
+                                    # A lower logloss = better model
+    n_jobs=-1,
+    random_state= 1244,
+    scale_pos_weight=scale  # ← Set the imbalance correction
+    )
 
 # ── 4. Cross-validate BEFORE final fit (model validation step) ─────────────
 #    This tells you how well your design generalises — use X_train/y_train only
@@ -82,4 +86,5 @@ print(confusion_matrix(y_test, y_pred))
 RocCurveDisplay.from_predictions(y_test, y_proba)
 plt.title("XGBoost ROC Curve – Telemarketing Success")
 plt.tight_layout()
+plt.savefig("modules/models/images/xg/xgb_roc.png")
 plt.show()
