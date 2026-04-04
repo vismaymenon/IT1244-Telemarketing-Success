@@ -49,7 +49,7 @@ python modules/models/random_forest.py   # Random Forest with RandomizedSearchCV
 python modules/models/XGBoost.py         # XGBoost with scale_pos_weight
 python modules/models/neural_network.py  # Neural Network (TensorFlow/Keras)
 ```
-Decision Tree, Random Forest, XGBoost and Neural Networks produce images as part of their evaluation. The images will be stored in `modules/models/images`.
+Decision Tree, Random Forest, XGBoost and Neural Networks produce images as part of their evaluation. The images will be stored in `modules/models/images`. There are images already there stored from the team's run if the user is interested.
 ### Full 5-Model Comparison
 
 Trains all five models on the same stratified 80/20 split, prints a side-by-side comparison of Precision, Recall, F1-Score, and AUC-ROC. This file will provide the final run 
